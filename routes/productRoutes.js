@@ -1,18 +1,24 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
+const { v2: cloudinary } = require('cloudinary');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const Product = require('../models/Product');
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    cb(null, path.join(__dirname, '..', 'uploads'));
-  },
-  filename(req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+// Configuration for Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'agro_market_products',
+    allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
   },
 });
 
@@ -35,7 +41,7 @@ router.post(
   async (req, res) => {
     try {
       const { name, category, type, quantity, retailPrice, wholesalePrice, notes } = req.body;
-      const image = req.file ? `/uploads/${req.file.filename}` : undefined;
+      const image = req.file ? req.file.path : undefined;
       const product = await Product.create({
         name,
         category,
@@ -80,7 +86,7 @@ router.put(
         if (req.body[field] !== undefined) product[field] = req.body[field];
       });
       if (req.file) {
-        product.image = `/uploads/${req.file.filename}`;
+        product.image = req.file.path;
       }
 
       const updated = await product.save();
