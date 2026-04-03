@@ -18,7 +18,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// ── All products (public) ─────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {
     const products = await Product.find().populate('farmer', 'name');
@@ -28,7 +27,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ── Create product (Farmer) ───────────────────────────────────────────────────
 router.post(
   '/',
   protect,
@@ -39,23 +37,23 @@ router.post(
       const { name, category, type, quantity, retailPrice, wholesalePrice, notes } = req.body;
       const image = req.file ? `/uploads/${req.file.filename}` : undefined;
       const product = await Product.create({
-        name, category, type, quantity, retailPrice, wholesalePrice, notes,
-        farmer: req.user._id, image,
+        name,
+        category,
+        type,
+        quantity,
+        retailPrice,
+        wholesalePrice,
+        notes,
+        farmer: req.user._id,
+        image,
       });
-
-      const populated = await Product.findById(product._id).populate('farmer', 'name');
-
-      // Notify all connected clients a new product is available
-      req.app.get('io').emit('product_added', populated);
-
-      res.status(201).json(populated);
+      res.status(201).json(product);
     } catch (err) {
       res.status(500).json({ message: 'Failed to create product', error: err.message });
     }
   }
 );
 
-// ── Farmer's own products ─────────────────────────────────────────────────────
 router.get('/farmer/me', protect, authorizeRoles('farmer'), async (req, res) => {
   try {
     const products = await Product.find({ farmer: req.user._id });
@@ -65,7 +63,6 @@ router.get('/farmer/me', protect, authorizeRoles('farmer'), async (req, res) => 
   }
 });
 
-// ── Update product (Farmer) ───────────────────────────────────────────────────
 router.put(
   '/:id',
   protect,
@@ -82,22 +79,18 @@ router.put(
       fields.forEach((field) => {
         if (req.body[field] !== undefined) product[field] = req.body[field];
       });
-      if (req.file) product.image = `/uploads/${req.file.filename}`;
+      if (req.file) {
+        product.image = `/uploads/${req.file.filename}`;
+      }
 
       const updated = await product.save();
-      const populated = await Product.findById(updated._id).populate('farmer', 'name');
-
-      // Notify all clients the product changed (stock, price, etc.)
-      req.app.get('io').emit('product_updated', populated);
-
-      res.json(populated);
+      res.json(updated);
     } catch (err) {
       res.status(500).json({ message: 'Failed to update product', error: err.message });
     }
   }
 );
 
-// ── Delete product (Farmer / Admin) ──────────────────────────────────────────
 router.delete('/:id', protect, authorizeRoles('farmer', 'admin'), async (req, res) => {
   try {
     const query =
@@ -108,17 +101,12 @@ router.delete('/:id', protect, authorizeRoles('farmer', 'admin'), async (req, re
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
     }
-
-    // Notify all clients the product was removed
-    req.app.get('io').emit('product_deleted', { _id: req.params.id });
-
     res.json({ message: 'Product deleted' });
   } catch (err) {
     res.status(500).json({ message: 'Failed to delete product', error: err.message });
   }
 });
 
-// ── Single product (public) ───────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   try {
     const product = await Product.findById(req.params.id).populate('farmer', 'name');
@@ -132,3 +120,4 @@ router.get('/:id', async (req, res) => {
 });
 
 module.exports = router;
+
