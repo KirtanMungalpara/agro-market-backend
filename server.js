@@ -17,51 +17,55 @@ const adminRoutes = require('./routes/adminRoutes');
 const app = express();
 const server = http.createServer(app);
 
+// ✅ CORS CONFIG (ONLY ONCE)
+const corsOptions = {
+  origin: process.env.CLIENT_URL, // frontend URL (IMPORTANT)
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+
+// ✅ SOCKET.IO CONFIG
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || '*',
+    origin: process.env.CLIENT_URL,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true,
   },
 });
 
-// Make io available in all route handlers via req.app.get('io')
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  // Each user joins a room with their own userId so we can send targeted events
   socket.on('join', (userId) => {
     if (userId) socket.join(userId);
   });
-
-  socket.on('disconnect', () => {});
 });
 
+// ✅ MIDDLEWARE
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
 app.use(morgan('dev'));
 
+// ✅ STATIC FILES
 const uploadsPath = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsPath));
 
+// ✅ ROUTES
 app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
 app.use('/orders', orderRoutes);
 app.use('/admin', adminRoutes);
 
+// ✅ TEST ROUTE
 app.get('/', (req, res) => {
   res.json({ message: 'Agro Market API running' });
 });
 
+// ✅ PORT
 const PORT = process.env.PORT || 5000;
 
-const cors = require('cors');
-
-app.use(cors({
-  origin: process.env.CLIENT_URL,
-  credentials: true
-}));
-
+// ✅ DB CONNECTION
 mongoose
   .connect(process.env.MONGO_URI, { dbName: 'agro_market' })
   .then(() => {
@@ -70,5 +74,5 @@ mongoose
     });
   })
   .catch((err) => {
-    console.error('MongoDB connection error', err);
+    console.error('MongoDB connection error:', err);
   });
