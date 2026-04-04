@@ -13,7 +13,6 @@ const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
-const mandiRoutes = require('./routes/mandiRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -57,7 +56,6 @@ app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
 app.use('/orders', orderRoutes);
 app.use('/admin', adminRoutes);
-app.use('/mandi-rates', mandiRoutes);
 
 // ✅ TEST ROUTE
 app.get('/', (req, res) => {
