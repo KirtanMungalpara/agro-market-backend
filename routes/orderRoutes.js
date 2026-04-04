@@ -3,6 +3,16 @@ const Order = require('../models/Order');
 const Payment = require('../models/Payment');
 const Product = require('../models/Product');
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
+
+let razorpayInstance;
+if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+  razorpayInstance = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
+}
 
 const router = express.Router();
 
@@ -84,7 +94,7 @@ router.put('/:id/status', protect, authorizeRoles('farmer'), async (req, res) =>
   }
 });
 
-router.post('/:id/pay', protect, authorizeRoles('retailer', 'wholesaler'), async (req, res) => {
+router.post('/:id/create-razorpay-order', protect, authorizeRoles('retailer', 'wholesaler'), async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
       .populate('product')
@@ -98,19 +108,67 @@ router.post('/:id/pay', protect, authorizeRoles('retailer', 'wholesaler'), async
       return res.status(400).json({ message: 'Order must be accepted by farmer before payment' });
     }
 
-    const payment = await Payment.create({
-      order: order._id,
-      buyer: req.user._id,
-      amount: order.totalPrice,
-      paymentStatus: 'Success',
+    if (!razorpayInstance) {
+      return res.status(500).json({ message: 'Razorpay keys not configured in backend' });
+    }
+
+    const options = {
+      amount: Math.round(order.totalPrice * 100),
+      currency: "INR",
+      receipt: `receipt_order_${order._id}`
+    };
+
+    const razorpayOrder = await razorpayInstance.orders.create(options);
+    
+    res.status(200).json({
+      id: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      orderId: order._id,
+      keyId: process.env.RAZORPAY_KEY_ID
     });
-
-    order.isPaid = true;
-    await order.save();
-
-    res.status(201).json({ payment, order });
   } catch (err) {
-    res.status(500).json({ message: 'Payment failed', error: err.message });
+    res.status(500).json({ message: 'Failed to create Razorpay order.', error: err.message });
+  }
+});
+
+router.post('/verify-payment', protect, authorizeRoles('retailer', 'wholesaler'), async (req, res) => {
+  try {
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature, order_id } = req.body;
+    
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest("hex");
+      
+    const isAuthentic = expectedSignature === razorpay_signature;
+
+    if (isAuthentic) {
+      const order = await Order.findById(order_id);
+      if (!order) return res.status(404).json({ message: 'Order not found' });
+      
+      let payment = await Payment.findOne({ razorpayOrderId: razorpay_order_id });
+      if (!payment) {
+        payment = await Payment.create({
+          order: order._id,
+          buyer: req.user._id,
+          amount: order.totalPrice,
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id,
+          paymentStatus: 'Success',
+        });
+        
+        order.isPaid = true;
+        await order.save();
+      }
+      return res.status(200).json({ success: true, payment, order });
+    } else {
+      return res.status(400).json({ message: 'Payment verification failed' });
+    }
+  } catch (err) {
+    res.status(500).json({ message: 'Payment verification failed', error: err.message });
   }
 });
 
