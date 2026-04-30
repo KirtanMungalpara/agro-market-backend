@@ -1,4 +1,17 @@
-node_modules/
+# Root .gitignore
 .env
-.DS_Store
-uploads/
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Backend
+backend/.env
+backend/.env.*
+
+# Frontend
+frontend/.env
+frontend/.env.*
+
+# Node modules
+node_modules/
